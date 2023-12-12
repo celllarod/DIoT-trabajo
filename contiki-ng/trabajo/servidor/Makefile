@@ -1,5 +1,5 @@
-CONTIKI_PROJECT = udp-client
+CONTIKI_PROJECT = servidor
 all: $(CONTIKI_PROJECT)
 
-CONTIKI=../../..
+CONTIKI=../../
 include $(CONTIKI)/Makefile.include
