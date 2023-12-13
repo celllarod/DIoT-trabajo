@@ -29,7 +29,7 @@ udp_rx_callback(struct simple_udp_connection *c,
          const uint8_t *data,
          uint16_t datalen)
 {
-
+  
   // Convertimos la cadena a int
   int data_celcius = atoi((char *) data);
 

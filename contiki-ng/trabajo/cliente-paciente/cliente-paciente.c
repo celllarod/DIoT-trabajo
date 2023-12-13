@@ -6,19 +6,21 @@
 #include "net/netstack.h"
 #include "net/ipv6/simple-udp.h"
 #include "lib/sensors.h"
-#include "common/temperature-sensor.h"
+#include "arch/platform/nrf52840/common/temperature-sensor.h"
+#include "dev/button-hal.h"
 
 #include "sys/log.h"
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
-#define WITH_SERVER_REPLY  1
+#define WITH_SERVER_REPLY  0
 #define UDP_CLIENT_PORT	8765
 #define UDP_SERVER_PORT	5678
 
 #define SEND_INTERVAL		  (60 * CLOCK_SECOND)
 
-#define PROCESS_EVENT_TEMPERATURA 244
+#define PROCESS_EVENT_TEMPERATURA 246
+#define PROCESS_TIMER_TEMP 245
 
 static struct simple_udp_connection udp_conn;
 
@@ -26,8 +28,9 @@ static struct simple_udp_connection udp_conn;
 PROCESS(udp_client_process, "UDP client");
 PROCESS(temperature_sensor_process, "Lee el sensor de temperatura periodicamente");
 PROCESS(timer_process, "Temporiza 3 segundos");
+PROCESS(button_hal_process, "Button HAL");
 
-AUTOSTART_PROCESSES(&udp_client_process, &temperature_sensor_process, &timer_process);
+AUTOSTART_PROCESSES(&udp_client_process, &temperature_sensor_process, &timer_process, &button_hal_process);
 /*---------------------------------------------------------------------------*/
 static void
 udp_rx_callback(struct simple_udp_connection *c,
@@ -52,27 +55,27 @@ PROCESS_THREAD(udp_client_process, ev, data)
 {
   static struct etimer periodic_timer;
   uip_ipaddr_t dest_ipaddr;
+  static char str[32];
 
   PROCESS_BEGIN();
 
   /* Initialize UDP connection */
   simple_udp_register(&udp_conn, UDP_CLIENT_PORT, NULL, UDP_SERVER_PORT, udp_rx_callback);
 
-  etimer_set(&periodic_timer, random_rand() % SEND_INTERVAL);
+  // etimer_set(&periodic_timer, random_rand() % SEND_INTERVAL);
   while(1) {
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
+    // PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
+
+    // Esperamos hasta recibir evento 
+    PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_TEMPERATURA );
 
     if(NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
-     
-    // Esperamos hasta recibir evento 
-    PROCESS_WAIT_EVENT();
-
-    if (ev==PROCESS_EVENT_TEMPERATURA) {
       
-      LOG_INFO("Enviando temperatura del paciente = %.*s\n", sizeof(data), (char *) data);
-      simple_udp_sendto(&udp_conn, data, strlen(data), &dest_ipaddr);
-
-    } 
+      if (ev==PROCESS_EVENT_TEMPERATURA) {
+        snprintf(str, sizeof(str), "%s", (char *) data);
+        LOG_INFO("Enviando temperatura del paciente = %.*s\n", sizeof(str), (char *) str);
+        simple_udp_sendto(&udp_conn, str, strlen(str), &dest_ipaddr);
+      } 
 
     } else {
       LOG_INFO("Not reachable yet\n");
@@ -103,7 +106,7 @@ PROCESS_THREAD(timer_process, ev, data)
     // Esperamos a que expire el timer periodico y luego lo reseteamos.
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer));
     etimer_reset(&timer);
-    process_poll(&udp_client_process);
+    process_post(&temperature_sensor_process, PROCESS_TIMER_TEMP, NULL);
     //enviear proccess poll poniendole un nombre concreto al evento
   } 
 
@@ -120,9 +123,9 @@ PROCESS_THREAD(temperature_sensor_process, ev, data)
   PROCESS_BEGIN();
 
   while(1) {
-
+   
      // Esperamos hasta recibir evento de timer_proccess
-    PROCESS_WAIT_EVENT();
+    PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_TIMER_TEMP);
 
     // Activamos el sensor de temperatura
     SENSORS_ACTIVATE(temperature_sensor);
@@ -136,9 +139,9 @@ PROCESS_THREAD(temperature_sensor_process, ev, data)
 
     // Imprimimos la temperatura con 2 decimales teniendo en cuenta que es un entero y que la resolucion es de 0.25 haciendo cast a float
     // Dividimos entre 4 porque la resolucion del sensor es de 0.25 (1/4)
-    printf("Temperatura leída: %d.%d ºC\n", temp/4, temp%4*25);
-
     snprintf(str, sizeof(str), "%d.%d", temp/4, temp%4*25);
+
+    LOG_INFO("[temp] Temperatura del paciente = %.*s\n", sizeof(str), (char *) str);
 
     process_post(&udp_client_process, PROCESS_EVENT_TEMPERATURA, str);
     
@@ -146,3 +149,31 @@ PROCESS_THREAD(temperature_sensor_process, ev, data)
 
   PROCESS_END();
 }
+/*---------------------------------------------------------------------------*/
+PROCESS_THREAD(button_hal_process, ev, data)
+{
+  button_hal_button_t *btn;
+
+  PROCESS_BEGIN();
+
+  btn = button_hal_get_by_index(0);
+
+  while(1) {
+
+    PROCESS_YIELD();
+
+     if(ev == button_hal_periodic_event) {
+      btn = (button_hal_button_t *)data;
+  
+      LOG_INFO("Boton pulsado: posible emergencia\n");
+
+      if(btn->press_duration_seconds > 3) {
+        LOG_INFO("Boton pulsado durante 3 segundos: emergencia\n");
+      } else {
+        LOG_INFO("Falsa alarma\n");
+      }
+    }
+  }
+  PROCESS_END();
+}
+/*---------------------------------------------------------------------------*/
