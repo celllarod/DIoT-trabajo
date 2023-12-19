@@ -8,12 +8,13 @@
 #include "lib/sensors.h"
 #include "arch/platform/nrf52840/common/temperature-sensor.h"
 #include "dev/button-hal.h"
+#include "dev/leds.h"
 
 #include "sys/log.h"
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
-#define WITH_SERVER_REPLY  0
+#define WITH_SERVER_REPLY  1
 #define UDP_CLIENT_PORT	8765
 #define UDP_SERVER_PORT	5678
 
@@ -43,7 +44,19 @@ udp_rx_callback(struct simple_udp_connection *c,
          uint16_t datalen)
 {
 
-  LOG_INFO("Temperatura en Fahrenheit calculada por el servidor = '%.*s' grados", datalen, (char *) data);
+  LOG_INFO("Recibido: '%.*s' ", datalen, (char *) data);
+
+  if (strcmp((char *) data, "ALERTA_TEMPERATURA")==0) {
+    leds_single_off(LEDS_LED1);
+    leds_single_on(LEDS_LED2);
+
+  }
+  if (strcmp((char *) data, "ALERTA_TEMPERATURA_FIN")==0) {
+    leds_single_off(LEDS_LED2);
+    leds_single_on(LEDS_LED1);
+    
+  }
+
 
 #if LLSEC802154_CONF_ENABLED
   LOG_INFO_(" LLSEC LV:%d", uipbuf_get_attr(UIPBUF_ATTR_LLSEC_LEVEL));
@@ -57,30 +70,39 @@ PROCESS_THREAD(udp_client_process, ev, data)
   static struct etimer periodic_timer;
   uip_ipaddr_t dest_ipaddr;
   static char str[32];
+  static bool primera_conexion = true;
 
   PROCESS_BEGIN();
+
+ // Inicializamos el led con color verde (todo ok)
+  leds_single_on(LEDS_LED1);
 
   /* Initialize UDP connection */
   simple_udp_register(&udp_conn, UDP_CLIENT_PORT, NULL, UDP_SERVER_PORT, udp_rx_callback);
 
-  // etimer_set(&periodic_timer, random_rand() % SEND_INTERVAL);
   while(1) {
-    // PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
 
-    // Esperamos hasta recibir evento 
-    PROCESS_WAIT_EVENT_UNTIL((ev == PROCESS_EVENT_TEMPERATURA) || (ev == PROCESS_EVENT_BOTON));
+      // Esperamos hasta recibir evento 
+      PROCESS_WAIT_EVENT_UNTIL((ev == PROCESS_EVENT_TEMPERATURA) || (ev == PROCESS_EVENT_BOTON));
+      if(NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
 
-    if(NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
-      
+        if (primera_conexion == true){
+          // Enviar mensaje de que se ha conectado al servidor
+          char * msg = "CLIENTE-1";
+          LOG_INFO("Enviando msg 1ª conexion al servidor\n");
+          simple_udp_sendto(&udp_conn, msg, strlen(msg), &dest_ipaddr);
+          primera_conexion = false;
+        }
+
       if (ev==PROCESS_EVENT_TEMPERATURA) {
-        snprintf(str, sizeof(str), "%s", (char *) data);
-        LOG_INFO("Enviando temperatura del paciente = %.*s\n", sizeof(str), (char *) str);
+        snprintf(str, sizeof(str), "TEMPERATURA:%s", (char *) data);
+        LOG_INFO("Enviando = %.*s\n", sizeof(str), (char *) str);
         simple_udp_sendto(&udp_conn, str, strlen(str), &dest_ipaddr);
       } 
       
       if (ev==PROCESS_EVENT_BOTON) {
         LOG_INFO("Enviando solicitud de emergencia\n");
-        char *msg = "Asistencia solicitada";
+        char *msg = "EMERGENCIA:Asistencia solicitada";
         simple_udp_sendto(&udp_conn, msg, strlen(msg), &dest_ipaddr);
       }
 
@@ -113,7 +135,6 @@ PROCESS_THREAD(timer_process, ev, data)
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer));
     etimer_reset(&timer);
     process_post(&temperature_sensor_process, PROCESS_TIMER_TEMP, NULL);
-    //enviear proccess poll poniendole un nombre concreto al evento
   } 
 
   PROCESS_END();
@@ -176,9 +197,7 @@ PROCESS_THREAD(button_hal_client_process, ev, data)
       if(btn->press_duration_seconds > 3) {
         LOG_INFO("Boton pulsado durante 3 segundos: emergencia\n");
         process_post(&udp_client_process, PROCESS_EVENT_BOTON, NULL);
-      } else {
-        LOG_INFO("Falsa alarma\n");
-      }
+      } 
     }
   }
   PROCESS_END();

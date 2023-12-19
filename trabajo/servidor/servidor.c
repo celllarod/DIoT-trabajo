@@ -10,12 +10,18 @@
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
-#define WITH_SERVER_REPLY  0
+#define WITH_SERVER_REPLY  1
 #define UDP_CLIENT_PORT	8765
 #define UDP_SERVER_PORT	5678
+#define UMBRAL_TEMPERATURA 33
 
 
 static struct simple_udp_connection udp_conn;
+static uip_ipaddr_t cli1_ipaddr;
+static uip_ipaddr_t cli2_ipaddr;
+
+// Declaracion de funciones
+void separarCadena(char *cadena, char *delimitador, char *partes[], int numPartes);
 
 PROCESS(udp_server_process, "UDP server");
 AUTOSTART_PROCESSES(&udp_server_process);
@@ -35,17 +41,69 @@ udp_rx_callback(struct simple_udp_connection *c,
   LOG_INFO("Direccion = ");
   LOG_INFO_6ADDR(sender_addr);
   LOG_INFO("\n");
-  LOG_INFO("Valor recibido = %.*s \n", datalen, (char *) data);
+  LOG_INFO("Recibido = %.*s \n", datalen, (char *) data);
+
+  if (strcmp((char *) data, "CLIENTE-1") == 0) {
+    cli1_ipaddr = *sender_addr;
+    LOG_INFO("Direccion cliente 1 = ");
+    LOG_INFO_6ADDR(&cli1_ipaddr);
+    LOG_INFO("\n");
+  } else if (strcmp((char *) data, "CLIENTE-2") == 0) {
+    cli2_ipaddr = *sender_addr;
+    LOG_INFO("Direccion cliente 2 = ");
+    LOG_INFO_6ADDR(&cli2_ipaddr);
+    LOG_INFO("\n");
+  } 
 
 #if WITH_SERVER_REPLY
-  LOG_INFO("Enviando temperatura en Fahrenheit = %.*s\n", sizeof(data_fahrenheit_str), (char *) data_fahrenheit_str);
-  LOG_INFO("Destino = ");
-  LOG_INFO_6ADDR(sender_addr);
-  LOG_INFO("\n");
+
+  char *datos_rx[2];
+  static bool alerta = false;
+
+// TODO: Problema aqui, se imprime TEMP en vez de TEMPERATURA. tiene que haber algo mal
+  // Llamar a la función para separar la cadena
+  char msg[32];
+  snprintf(msg, sizeof(msg), "%s", (char *) data);
+  separarCadena(msg, ":", datos_rx, 2);
+
+  // Debug
+  LOG_INFO("%.*s \n", sizeof(datos_rx[0]), (char *) datos_rx[0]);
+  LOG_INFO("%.*s \n", sizeof(datos_rx[1]), (char *) datos_rx[1]);
+
+  if (strcmp(datos_rx[0], "EMERGENCIA")==0){
+    // Enviar al cliente 2 la alerta
+
+
+  } else if (strcmp(datos_rx[0], "TEMPERATURA")==0){
+    LOG_INFO("TEMPERATURA\n"); //debug
+    // Comprobar que no supere el umbral. Si lo supera, enviar alerta a los clientes
+    if (atoi(datos_rx[1]) > UMBRAL_TEMPERATURA && alerta == false) {
+      // Enviar al cliente 1 la alerta para que este encienda led rojo
+      char * msg = "ALERTA_TEMPERATURA";
+      simple_udp_sendto(&udp_conn, msg, strlen(msg), &cli1_ipaddr);
+      alerta = true;
+      LOG_INFO("Destino = ");
+      LOG_INFO_6ADDR(sender_addr);
+      LOG_INFO("\n");
   
-  // Enviamos respuesta al cliente: temperatura convertida de Celcius a Fahrenheit
-  simple_udp_sendto(&udp_conn, data_fahrenheit_str, sizeof(data_fahrenheit_str), sender_addr);
- 
+      // Enviar al cliente 2 la alerta 
+      // simple_udp_sendto(&udp_conn, "ALERTA", sizeof("ALERTA"), &cli2_ipaddr);
+    }
+    // Si no supera el umbral y la alerta es true, se envia al cliente para avisar de que ya no hay alerta
+    else if (atoi(datos_rx[1]) < UMBRAL_TEMPERATURA && alerta == true) {
+      // Enviar al cliente 1 la alerta para que este encienda led rojo
+      char * msg = "ALERTA_TEMPERATURA_FIN";
+      simple_udp_sendto(&udp_conn, msg, strlen(msg), &cli1_ipaddr);
+      alerta = false;
+      LOG_INFO("Destino = ");
+      LOG_INFO_6ADDR(sender_addr);
+      LOG_INFO("\n");
+  
+      // Enviar al cliente 2 la alerta 
+      // simple_udp_sendto(&udp_conn, "ALERTA", sizeof("ALERTA"), &cli2_ipaddr);
+    }
+  }
+
 #endif /* WITH_SERVER_REPLY */
 }
 /*---------------------------------------------------------------------------*/
@@ -63,3 +121,16 @@ PROCESS_THREAD(udp_server_process, ev, data)
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
+
+void separarCadena(char *cadena, char *delimitador, char *partes[], int numPartes) {
+    char *token = strtok(cadena, delimitador);
+    
+    int i = 0;
+    while (token != NULL && i < numPartes) {
+        partes[i] = token;
+        LOG_INFO("Parte %d = %.*s \n", i, sizeof(partes[i]), (char *) partes[i]);
+        i++;
+        token = strtok(NULL, delimitador);
+        
+    }
+}
