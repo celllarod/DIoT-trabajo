@@ -1,4 +1,4 @@
-CONTIKI_PROJECT = enfermero
+CONTIKI_PROJECT = cliente-enfermero
 all: $(CONTIKI_PROJECT)
 
 CONTIKI=../../
