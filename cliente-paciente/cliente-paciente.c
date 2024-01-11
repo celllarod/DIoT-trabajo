@@ -45,13 +45,15 @@ udp_rx_callback(struct simple_udp_connection *c,
 {
 
   LOG_INFO("Recibido: '%.*s' ", datalen, (char *) data);
-
-  if (strcmp((char *) data, "ALERTA_TEMPERATURA")==0) {
+  
+  if (strcmp((char *) data, "1")==0) {//Alerta temperatura
+    LOG_INFO("led_rojo");
     leds_single_off(LEDS_LED1);
     leds_single_on(LEDS_LED2);
 
   }
-  if (strcmp((char *) data, "ALERTA_TEMPERATURA_FIN")==0) {
+  if (strcmp((char *) data, "2")==0) {//Alerta temperatura fin
+    LOG_INFO("led_verde");
     leds_single_off(LEDS_LED2);
     leds_single_on(LEDS_LED1);
     
@@ -102,7 +104,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
       
       if (ev==PROCESS_EVENT_BOTON) {
         LOG_INFO("Enviando solicitud de emergencia\n");
-        char *msg = "EMERGENCIA:Asistencia solicitada";
+        char *msg = "EMERGENCIA:SOS!!!";
         simple_udp_sendto(&udp_conn, msg, strlen(msg), &dest_ipaddr);
       }
 
