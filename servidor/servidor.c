@@ -13,12 +13,13 @@
 #define WITH_SERVER_REPLY  1
 #define UDP_CLIENT_PORT	8765
 #define UDP_SERVER_PORT	5678
-#define UMBRAL_TEMPERATURA 29
+#define UMBRAL_TEMPERATURA 29.0
 
 
 static struct simple_udp_connection udp_conn;
 static uip_ipaddr_t cli1_ipaddr;
 static uip_ipaddr_t cli2_ipaddr;
+static bool alerta = false;
 
 // Declaracion de funciones
 void separarCadena(char *cadena, char *delimitador, char *partes[], int numPartes);
@@ -58,11 +59,8 @@ udp_rx_callback(struct simple_udp_connection *c,
 #if WITH_SERVER_REPLY
 
  
- char *datos_rx[2];
+  char *datos_rx[2] ={NULL, NULL};
  
- 
- static bool alerta = false;
-
 // TODO: Problema aqui, se imprime TEMP en vez de TEMPERATURA. tiene que haber algo mal
   // Llamar a la función para separar la cadena
   char msg[32];
@@ -74,15 +72,16 @@ udp_rx_callback(struct simple_udp_connection *c,
   LOG_INFO("%.*s \n", strlen(datos_rx[1]), (char *) datos_rx[1]);
 
   if (strcmp(datos_rx[0], "EMERGENCIA")==0){
+    LOG_INFO("RX: EMERGENCIA\n"); //debug
     // Enviar al cliente 2 la alerta
-
+    // simple_udp_sendto(&udp_conn, "ALERTA", sizeof("ALERTA"), &cli2_ipaddr);
 
   } else if (strcmp(datos_rx[0], "TEMPERATURA")==0){
     LOG_INFO("RX: TEMPERATURA\n"); //debug
     // Comprobar que no supere el umbral. Si lo supera, enviar alerta a los clientes
-    if (atoi(datos_rx[1])-1  > UMBRAL_TEMPERATURA && alerta == false) {
+    if (atof(datos_rx[1])  > UMBRAL_TEMPERATURA && alerta == false) {
       // Enviar al cliente 1 la alerta para que este encienda led rojo
-      char * msg = "ALERTA_TEMPERATURA";
+      char * msg = "1"; //ALERTA_TEMPERATURA
       simple_udp_sendto(&udp_conn, msg, strlen(msg), &cli1_ipaddr);
       alerta = true;
       LOG_INFO("Alerta temp Destino = ");
@@ -93,9 +92,9 @@ udp_rx_callback(struct simple_udp_connection *c,
       // simple_udp_sendto(&udp_conn, "ALERTA", sizeof("ALERTA"), &cli2_ipaddr);
     }
     // Si no supera el umbral y la alerta es true, se envia al cliente para avisar de que ya no hay alerta
-    else if (atoi(datos_rx[1])-1 < UMBRAL_TEMPERATURA && alerta == true) {
+    else if (atof(datos_rx[1]) < UMBRAL_TEMPERATURA && alerta == true) {
       // Enviar al cliente 1 la alerta para que este encienda led rojo
-      char * msg = "ALERTA_TEMPERATURA_FIN";
+      char * msg = "2"; //ALERTA_TEMPERATURA_FIN
       simple_udp_sendto(&udp_conn, msg, strlen(msg), &cli1_ipaddr);
       alerta = false;
       LOG_INFO("Alerta fin Destino = ");
