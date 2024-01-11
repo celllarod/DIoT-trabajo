@@ -13,7 +13,7 @@
 #define WITH_SERVER_REPLY  1
 #define UDP_CLIENT_PORT	8765
 #define UDP_SERVER_PORT	5678
-#define UMBRAL_TEMPERATURA 33
+#define UMBRAL_TEMPERATURA 29
 
 
 static struct simple_udp_connection udp_conn;
@@ -40,25 +40,28 @@ udp_rx_callback(struct simple_udp_connection *c,
   LOG_INFO("Info recibida del nodo: %.*s \n", datalen, (char *) data);
   LOG_INFO("Direccion = ");
   LOG_INFO_6ADDR(sender_addr);
-  LOG_INFO("\n");
+  LOG_INFO_("\n");
   LOG_INFO("Recibido = %.*s \n", datalen, (char *) data);
 
   if (strcmp((char *) data, "CLIENTE-1") == 0) {
     cli1_ipaddr = *sender_addr;
     LOG_INFO("Direccion cliente 1 = ");
     LOG_INFO_6ADDR(&cli1_ipaddr);
-    LOG_INFO("\n");
+    LOG_INFO_("\n");
   } else if (strcmp((char *) data, "CLIENTE-2") == 0) {
     cli2_ipaddr = *sender_addr;
     LOG_INFO("Direccion cliente 2 = ");
     LOG_INFO_6ADDR(&cli2_ipaddr);
-    LOG_INFO("\n");
+    LOG_INFO_("\n");
   } 
 
 #if WITH_SERVER_REPLY
 
-  char *datos_rx[2];
-  static bool alerta = false;
+ 
+ char *datos_rx[2];
+ 
+ 
+ static bool alerta = false;
 
 // TODO: Problema aqui, se imprime TEMP en vez de TEMPERATURA. tiene que haber algo mal
   // Llamar a la función para separar la cadena
@@ -67,37 +70,37 @@ udp_rx_callback(struct simple_udp_connection *c,
   separarCadena(msg, ":", datos_rx, 2);
 
   // Debug
-  LOG_INFO("%.*s \n", sizeof(datos_rx[0]), (char *) datos_rx[0]);
-  LOG_INFO("%.*s \n", sizeof(datos_rx[1]), (char *) datos_rx[1]);
+  LOG_INFO("%.*s \n", strlen(datos_rx[0]), (char *) datos_rx[0]);
+  LOG_INFO("%.*s \n", strlen(datos_rx[1]), (char *) datos_rx[1]);
 
   if (strcmp(datos_rx[0], "EMERGENCIA")==0){
     // Enviar al cliente 2 la alerta
 
 
   } else if (strcmp(datos_rx[0], "TEMPERATURA")==0){
-    LOG_INFO("TEMPERATURA\n"); //debug
+    LOG_INFO("RX: TEMPERATURA\n"); //debug
     // Comprobar que no supere el umbral. Si lo supera, enviar alerta a los clientes
-    if (atoi(datos_rx[1]) > UMBRAL_TEMPERATURA && alerta == false) {
+    if (atoi(datos_rx[1])-1  > UMBRAL_TEMPERATURA && alerta == false) {
       // Enviar al cliente 1 la alerta para que este encienda led rojo
       char * msg = "ALERTA_TEMPERATURA";
       simple_udp_sendto(&udp_conn, msg, strlen(msg), &cli1_ipaddr);
       alerta = true;
-      LOG_INFO("Destino = ");
+      LOG_INFO("Alerta temp Destino = ");
       LOG_INFO_6ADDR(sender_addr);
-      LOG_INFO("\n");
+      LOG_INFO_("\n");
   
       // Enviar al cliente 2 la alerta 
       // simple_udp_sendto(&udp_conn, "ALERTA", sizeof("ALERTA"), &cli2_ipaddr);
     }
     // Si no supera el umbral y la alerta es true, se envia al cliente para avisar de que ya no hay alerta
-    else if (atoi(datos_rx[1]) < UMBRAL_TEMPERATURA && alerta == true) {
+    else if (atoi(datos_rx[1])-1 < UMBRAL_TEMPERATURA && alerta == true) {
       // Enviar al cliente 1 la alerta para que este encienda led rojo
       char * msg = "ALERTA_TEMPERATURA_FIN";
       simple_udp_sendto(&udp_conn, msg, strlen(msg), &cli1_ipaddr);
       alerta = false;
-      LOG_INFO("Destino = ");
+      LOG_INFO("Alerta fin Destino = ");
       LOG_INFO_6ADDR(sender_addr);
-      LOG_INFO("\n");
+      LOG_INFO_("\n");
   
       // Enviar al cliente 2 la alerta 
       // simple_udp_sendto(&udp_conn, "ALERTA", sizeof("ALERTA"), &cli2_ipaddr);
@@ -128,7 +131,7 @@ void separarCadena(char *cadena, char *delimitador, char *partes[], int numParte
     int i = 0;
     while (token != NULL && i < numPartes) {
         partes[i] = token;
-        LOG_INFO("Parte %d = %.*s \n", i, sizeof(partes[i]), (char *) partes[i]);
+        LOG_INFO("Parte %d = %.*s \n", i, strlen(partes[i]), (char *) partes[i]);
         i++;
         token = strtok(NULL, delimitador);
         
