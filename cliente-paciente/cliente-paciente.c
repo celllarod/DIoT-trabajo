@@ -110,6 +110,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
     } else {
       LOG_INFO("Not reachable yet\n");
+      primera_conexion = true;
     }
 
     /* Add some jitter */
