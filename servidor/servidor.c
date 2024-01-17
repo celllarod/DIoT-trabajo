@@ -15,7 +15,13 @@
 #define UDP_CLIENT_2_PORT	8766
 #define UDP_SERVER_PORT	5678
 
-#define UMBRAL_TEMPERATURA 33.0
+#define UMBRAL_TEMPERATURA 37.0
+
+#define CLIENTE_1 "C1"
+#define CLIENTE_2 "C2"
+#define EMERGENCIA "EM"
+#define ASISTENCIA "AS"
+#define TEMPERATURA "TP"
 
 #define ALERTA_CLI_2 "1"
 #define ALERTA_URGENTE_CLI_2 "2"
@@ -62,13 +68,13 @@ udp_rx_callback(struct simple_udp_connection *c,
   LOG_INFO_("\n");
   LOG_INFO("Recibido = %.*s \n", datalen, (char *) data);
 
-  if (strcmp((char *) data, "CLIENTE-1") == 0) {
+  if (strcmp((char *) data, CLIENTE_1) == 0) {
     cli1_ipaddr = *sender_addr;
     LOG_INFO("Direccion cliente 1 = ");
     LOG_INFO_6ADDR(&cli1_ipaddr);
     LOG_INFO_("\n");
   } 
-  if (strcmp((char *) data, "CLIENTE-2") == 0) {
+  if (strcmp((char *) data, CLIENTE_2) == 0) {
     cli2_ipaddr = *sender_addr;
     LOG_INFO("Direccion cliente 2 = ");
     LOG_INFO_6ADDR(&cli2_ipaddr);
@@ -94,17 +100,17 @@ udp_rx_callback(struct simple_udp_connection *c,
   //LOG_INFO("%.*s \n", strlen(datos_rx[0]), (char *) datos_rx[0]);
   //LOG_INFO("%.*s \n", strlen(datos_rx[1]), (char *) datos_rx[1]);
 
-  if (strcmp(datos_rx[0], "EMERGENCIA")==0){
+  if (strcmp(datos_rx[0], EMERGENCIA)==0){
     LOG_INFO("RX: EMERGENCIA\n"); //debug
     // Enviar al cliente 2 la alerta
     alerta_emergencia = true;
-    alerta = true;
+    //alerta = true;
     simple_udp_sendto(&udp_conn[1], ALERTA_CLI_2, sizeof(ALERTA_CLI_2), &cli2_ipaddr); //1: ALERTA
     LOG_INFO("TX-CLI2: ALERTA\n"); //debug
     LOG_INFO_6ADDR(&cli2_ipaddr);
     LOG_INFO_("\n");
 
-  } else if (strcmp(datos_rx[0], "TEMPERATURA")==0){
+  } else if (strcmp(datos_rx[0],TEMPERATURA)==0){
     LOG_INFO("RX: TEMPERATURA\n"); //debug
 
     // Comprobar que no supere el umbral. Si lo supera, enviar alerta a los clientes
@@ -131,9 +137,10 @@ udp_rx_callback(struct simple_udp_connection *c,
       // Enviar al cliente 2 fin alerta 
       simple_udp_sendto(&udp_conn[1], ALERTA_FIN_CLI_2, sizeof(ALERTA_FIN_CLI_2), &cli2_ipaddr);
     }
-  } else if (strcmp(datos_rx[0], "ASISTENCIA")==0) {
+  } else if (strcmp(datos_rx[0], ASISTENCIA)==0) {
     LOG_INFO("RX: ASISTENCIA\n"); //debug
     alerta_emergencia = false;
+    alerta=false;
   }
 
 #endif /* WITH_SERVER_REPLY */
@@ -198,14 +205,15 @@ PROCESS_THREAD(alerta_proccess, ev, data)
   PROCESS_BEGIN();
 
   // Timer para que el proceso se despierte cada 1 segundos
-  etimer_set(&periodic_timer, CLOCK_SECOND * 1);
+  etimer_set(&periodic_timer, CLOCK_SECOND * 2);
 
   while(1) {
     //LOG_INFO("ALERTA_PROCCESS\n");
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer)); 
 
-    if (alerta == true) {
+    if (alerta == true|| alerta_emergencia == true) {
+      LOG_INFO("alerte %d - alerta_emergencia %d\n", alerta, alerta_emergencia);
       LOG_INFO("Alerta true --> Temporizar\n");
       process_poll(&periodic_process);
 
@@ -213,7 +221,7 @@ PROCESS_THREAD(alerta_proccess, ev, data)
       PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_POLL);
 
       // Si la alerta sigue activa al finalizar la temporizacion, se envia la alerta urgente al enfermero
-      if(alerta==true){
+      if(alerta==true|| alerta_emergencia == true){
         LOG_INFO("Alerta sigue true --> TX-CLI2-ALERTA_URGENTE\n");
         char * msg = ALERTA_URGENTE_CLI_2;
         simple_udp_sendto(&udp_conn[1], msg, strlen(msg), &cli2_ipaddr);
@@ -241,6 +249,7 @@ PROCESS_THREAD(periodic_process, ev, data)
     LOG_INFO("------> Temporizando 10s\n");
     // Configuramos el timer periodico para que expire en 1 segundos.
     etimer_set(&timer, CLOCK_SECOND * 10);
+    LOG_INFO("alerte %d - alerta_emergencia %d\n", alerta, alerta_emergencia);
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer));
     etimer_reset(&timer);
