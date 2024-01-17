@@ -29,8 +29,9 @@ static bool parpadeo=false;
 PROCESS(udp_client_process, "UDP client");
 PROCESS(button_hal_client_process, "Button HAL");
 PROCESS(parpadeo_process, "parpadeo");
+PROCESS(control_parpadeo_process, "control parpadeo");
 
-AUTOSTART_PROCESSES(&udp_client_process, &button_hal_client_process,&parpadeo_process);
+AUTOSTART_PROCESSES(&udp_client_process, &button_hal_client_process,&parpadeo_process,&control_parpadeo_process);
 /*---------------------------------------------------------------------------*/
 static void
 udp_rx_callback(struct simple_udp_connection *c,
@@ -57,6 +58,7 @@ udp_rx_callback(struct simple_udp_connection *c,
   }
 
   if (strcmp((char *) data, "3")==0) {//Alerta temperatura fin
+    
     LOG_INFO("led_verde");
     leds_single_off(LEDS_LED2);
     leds_single_on(LEDS_LED1);
@@ -106,6 +108,9 @@ PROCESS_THREAD(udp_client_process, ev, data)
             LOG_INFO("Enviando respuesta de asistencia\n");
             char *msg = "ASISTENCIA";
             simple_udp_sendto(&udp_conn, msg, strlen(msg), &dest_ipaddr);
+            LOG_INFO("direccion servidor");
+            LOG_INFO_6ADDR(&dest_ipaddr);
+            LOG_INFO("\n");
           }
 
       }
@@ -138,6 +143,7 @@ PROCESS_THREAD(button_hal_client_process, ev, data)
 
         // Fin de alerta
         alerta = false;
+        parpadeo = false;
         LOG_INFO("led_verde");
         leds_single_off(LEDS_LED2);
         leds_single_on(LEDS_LED1);
@@ -146,6 +152,32 @@ PROCESS_THREAD(button_hal_client_process, ev, data)
   }
   PROCESS_END();
 }
+// PROCESS_THREAD(control_parpadeo_process,ev,data)
+// {
+//   static struct etimer control_timer;
+
+//   PROCESS_BEGIN();
+
+//   // Timer para que el proceso se despierte cada 1 segundos
+//   etimer_set(&control_timer, CLOCK_SECOND * 2);
+
+//   while(1) {
+//     //LOG_INFO("ALERTA_PROCCESS\n");
+
+//     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&control_timer)); 
+
+//     if (parpadeo == true) {
+//       LOG_INFO("Alerta true --> Temporizar\n");
+//       process_poll(&parpadeo_process);
+//       // Esperamos hasta recibir evento de periodic_process (fin temporizacion 10s)
+      
+//     }
+    
+//     etimer_reset(&control_timer);
+//   }
+//   PROCESS_END();
+// }
+
 PROCESS_THREAD(parpadeo_process, ev, data)
 {
  static struct etimer pap_timer;
@@ -154,17 +186,30 @@ PROCESS_THREAD(parpadeo_process, ev, data)
   PROCESS_BEGIN();
 
   /* Setup a periodic timer that expires after 2 seconds. */
-  etimer_set(&pap_timer, CLOCK_SECOND * 2);
+  etimer_set(&pap_timer, CLOCK_SECOND * 0.5);
    
   while(1) {
-    PROCESS_YIELD();
-    if(parpadeo==true){
-   
-      leds_single_toggle(LEDS_LED2);
+      LOG_INFO("esperando process poll\n");
+      // PROCESS_WAIT_EVENT_UNTIL(ev==PROCESS_EVENT_POLL);
+
       PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&pap_timer));
-      etimer_reset(&pap_timer);
-      }else  etimer_reset(&pap_timer);
-   }
+
+      while(parpadeo == true) {
+      leds_single_toggle(LEDS_LED2) ; 
+       etimer_set(&pap_timer, CLOCK_SECOND * 0.5);
+       
+        // LOG_INFO("parapadeo off\n");
+        // leds_single_off(LEDS_LED2);
+        // etimer_reset(&pap_timer);
+        // PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&pap_timer));
+        // leds_single_on(LEDS_LED2);
+        // LOG_INFO("parpadeo on\n");
+        // etimer_reset(&pap_timer);
+      }
+    }
+   
 
   PROCESS_END();
 }
+
+// 
