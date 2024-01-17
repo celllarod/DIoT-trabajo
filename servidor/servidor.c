@@ -15,7 +15,7 @@
 #define UDP_CLIENT_2_PORT	8766
 #define UDP_SERVER_PORT	5678
 
-#define UMBRAL_TEMPERATURA 31.0
+#define UMBRAL_TEMPERATURA 33.0
 
 #define ALERTA_CLI_2 "1"
 #define ALERTA_URGENTE_CLI_2 "2"
@@ -31,6 +31,7 @@
 static struct simple_udp_connection udp_conn[NUM_CLIENTES];
 static uip_ipaddr_t cli1_ipaddr;
 static uip_ipaddr_t cli2_ipaddr;
+static uip_ipaddr_t receiver_ipaddr;
 static bool alerta = false;
 static bool alerta_emergencia = false;
 
@@ -72,6 +73,11 @@ udp_rx_callback(struct simple_udp_connection *c,
     LOG_INFO("Direccion cliente 2 = ");
     LOG_INFO_6ADDR(&cli2_ipaddr);
     LOG_INFO_("\n");
+    receiver_ipaddr = *receiver_addr;
+    LOG_INFO("Direccion servidor: ");
+    LOG_INFO_6ADDR(&receiver_ipaddr);
+    LOG_INFO_("\n");
+
   } 
 
 #if WITH_SERVER_REPLY
@@ -181,36 +187,40 @@ PROCESS_THREAD(udp_server_process, ev, data)
 
 //   PROCESS_END();
 // }
+/*---------------------------------------------------------------------------*/
+// Proceso  que comprueba continuamente si hay alerta y si la hay, le envia un 
+// evento al proceso periodic_process para que este temporice 10s. Si finaliza 
+// la temporizacion y la alerta sigue activa, se envia la alerta urgente al enfermero
 PROCESS_THREAD(alerta_proccess, ev, data)
 {
   static struct etimer periodic_timer;
 
   PROCESS_BEGIN();
 
-  LOG_INFO("COMIENZA ALERTA_PROCCESS\n");  
-
-  etimer_set(&periodic_timer, random_rand() % SEND_INTERVAL);
+  // Timer para que el proceso se despierte cada 1 segundos
+  etimer_set(&periodic_timer, CLOCK_SECOND * 1);
 
   while(1) {
-    LOG_INFO("ALERTA_PROCCESS\n");
+    //LOG_INFO("ALERTA_PROCCESS\n");
 
-    //PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer)); 
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer)); 
 
     if (alerta == true) {
       LOG_INFO("Alerta true --> Temporizar\n");
       process_poll(&periodic_process);
-      LOG_INFO("Alerta false --> Esperando evento\n");
+
       // Esperamos hasta recibir evento de periodic_process (fin temporizacion 10s)
       PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_POLL);
+
+      // Si la alerta sigue activa al finalizar la temporizacion, se envia la alerta urgente al enfermero
       if(alerta==true){
-        LOG_INFO("Alerta sigue true --> Se envia evento fin temporizacion\n");
-        LOG_INFO("Enviando ALERTA_URGENTE a enfermero\n");
+        LOG_INFO("Alerta sigue true --> TX-CLI2-ALERTA_URGENTE\n");
         char * msg = ALERTA_URGENTE_CLI_2;
         simple_udp_sendto(&udp_conn[1], msg, strlen(msg), &cli2_ipaddr);
       }
-    } else {
-      
     }
+
+    etimer_reset(&periodic_timer);
   }
   PROCESS_END();
 }
@@ -221,31 +231,22 @@ PROCESS_THREAD(periodic_process, ev, data)
 
   PROCESS_BEGIN();
   
-  // Configuramos el timer periodico para que expire en 10 segundos.
-  etimer_set(&timer, CLOCK_SECOND * 10);
-
+  
   LOG_INFO("COMIENZA PROCESO TEMPORIZADOR\n");
 
   while(1) {
 
+    // Esperamos hasta recibir evento de alerta_proccess (alerta activa) para comenzar la temporizacion
     PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_POLL);
     LOG_INFO("------> Temporizando 10s\n");
-    etimer_reset(&timer);
+    // Configuramos el timer periodico para que expire en 1 segundos.
+    etimer_set(&timer, CLOCK_SECOND * 10);
+
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer));
+    etimer_reset(&timer);
     LOG_INFO("Fin temporizacion 10s\n");
-    // Se genera evento hacia el proceso udp_server_process.
+    // Se envia un evento al proceso alerta_proccess indicando que ha finalizado la temporizacion
     process_poll(&alerta_proccess);
-    
-    
-      //  LOG_INFO("Alerta true --> Temporizando 10s\n");
-      // // Esperamos a que expire el timer periodico y luego lo reseteamos.
-      // PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer));
-      // etimer_reset(&timer);
-      // LOG_INFO("Fin temporizacion 10s\n");
-      // if(alerta==true){
-      //   // Se genera evento hacia el proceso udp_server_process.
-      //    LOG_INFO("Alerta sigue true --> Se envia evento fin temporizacion\n");
-      //   process_poll(&alerta_proccess);
   }
   PROCESS_END();
 }
