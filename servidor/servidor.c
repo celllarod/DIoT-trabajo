@@ -98,7 +98,7 @@ udp_rx_callback(struct simple_udp_connection *c,
     LOG_INFO("RX: EMERGENCIA\n"); //debug
     // Enviar al cliente 2 la alerta
     alerta_emergencia = true;
-    alerta = true;
+    //alerta = true;
     simple_udp_sendto(&udp_conn[1], ALERTA_CLI_2, sizeof(ALERTA_CLI_2), &cli2_ipaddr); //1: ALERTA
     LOG_INFO("TX-CLI2: ALERTA\n"); //debug
     LOG_INFO_6ADDR(&cli2_ipaddr);
@@ -131,9 +131,10 @@ udp_rx_callback(struct simple_udp_connection *c,
       // Enviar al cliente 2 fin alerta 
       simple_udp_sendto(&udp_conn[1], ALERTA_FIN_CLI_2, sizeof(ALERTA_FIN_CLI_2), &cli2_ipaddr);
     }
-  } else if (strcmp(datos_rx[0], "ASISTENCIA")==0) {
+  } else if (strcmp(datos_rx[0], "ASISTENCIA!")==0) {
     LOG_INFO("RX: ASISTENCIA\n"); //debug
     alerta_emergencia = false;
+    alerta = false;
   }
 
 #endif /* WITH_SERVER_REPLY */
@@ -198,14 +199,15 @@ PROCESS_THREAD(alerta_proccess, ev, data)
   PROCESS_BEGIN();
 
   // Timer para que el proceso se despierte cada 1 segundos
-  etimer_set(&periodic_timer, CLOCK_SECOND * 1);
+  etimer_set(&periodic_timer, CLOCK_SECOND * 2 );
 
   while(1) {
     //LOG_INFO("ALERTA_PROCCESS\n");
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer)); 
 
-    if (alerta == true) {
+    if (alerta == true || alerta_emergencia == true) {
+      LOG_INFO("alerte %d - alerta_emergencia %d\n", alerta, alerta_emergencia);
       LOG_INFO("Alerta true --> Temporizar\n");
       process_poll(&periodic_process);
 
@@ -213,7 +215,8 @@ PROCESS_THREAD(alerta_proccess, ev, data)
       PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_POLL);
 
       // Si la alerta sigue activa al finalizar la temporizacion, se envia la alerta urgente al enfermero
-      if(alerta==true){
+      if(alerta==true || alerta_emergencia == true){
+        LOG_INFO("alerte %d - alerta_emergencia %d\n", alerta, alerta_emergencia);
         LOG_INFO("Alerta sigue true --> TX-CLI2-ALERTA_URGENTE\n");
         char * msg = ALERTA_URGENTE_CLI_2;
         simple_udp_sendto(&udp_conn[1], msg, strlen(msg), &cli2_ipaddr);
@@ -239,7 +242,9 @@ PROCESS_THREAD(periodic_process, ev, data)
     // Esperamos hasta recibir evento de alerta_proccess (alerta activa) para comenzar la temporizacion
     PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_POLL);
     LOG_INFO("------> Temporizando 10s\n");
+    LOG_INFO("alerte %d - alerta_emergencia %d\n", alerta, alerta_emergencia);
     // Configuramos el timer periodico para que expire en 1 segundos.
+
     etimer_set(&timer, CLOCK_SECOND * 10);
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer));

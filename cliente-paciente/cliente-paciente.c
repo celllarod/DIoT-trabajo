@@ -24,6 +24,10 @@
 #define PROCESS_EVENT_TEMPERATURA 246
 #define PROCESS_EVENT_BOTON 247
 
+#define CLIENTE_1 "C1"
+#define TEMPERATURA "TP"
+#define EMERGENCIA "EM"
+
 static struct simple_udp_connection udp_conn;
 
 /*---------------------------------------------------------------------------*/
@@ -90,21 +94,21 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
         if (primera_conexion == true){
           // Enviar mensaje de que se ha conectado al servidor
-          char * msg = "CLIENTE-1";
+          char * msg = CLIENTE_1;
           LOG_INFO("Enviando msg 1ª conexion al servidor\n");
           simple_udp_sendto(&udp_conn, msg, strlen(msg), &dest_ipaddr);
           primera_conexion = false;
         }
 
       if (ev==PROCESS_EVENT_TEMPERATURA) {
-        snprintf(str, sizeof(str), "TEMPERATURA:%s", (char *) data);
+        snprintf(str, sizeof(str), "%s:%s", (char *) TEMPERATURA, (char *) data);
         LOG_INFO("Enviando = %.*s\n", sizeof(str), (char *) str);
         simple_udp_sendto(&udp_conn, str, strlen(str), &dest_ipaddr);
       } 
       
       if (ev==PROCESS_EVENT_BOTON) {
         LOG_INFO("Enviando solicitud de emergencia\n");
-        char *msg = "EMERGENCIA:SOS!!!";
+        char *msg = EMERGENCIA;
         simple_udp_sendto(&udp_conn, msg, strlen(msg), &dest_ipaddr);
       }
 
