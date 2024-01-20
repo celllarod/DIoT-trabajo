@@ -42,6 +42,8 @@ static bool alerta_emergencia = false;
 // Declaracion de funciones
 void separarCadena(char *cadena, char *delimitador, char *partes[], int numPartes);
 
+void mqtt_temp_export(char *data_celsius_str);
+
 PROCESS(udp_server_process, "UDP server");
 PROCESS(alerta_proccess, "Proceso que envia alerta al enfermero");
 PROCESS(periodic_process, "Evento periodico process");
@@ -66,6 +68,9 @@ udp_rx_callback(struct simple_udp_connection *c,
   LOG_INFO_("\n");
   LOG_INFO("Recibido = %.*s \n", datalen, (char *)data);
 
+  // El primer mensaje con cada cliente siempre sera CLIENTE_N. Cuando se reciba
+  // este mensaje, se guardara la direccion del cliente en una variable global para
+  // poder enviarle mensajes posteriormente.
   if (strcmp((char *)data, CLIENTE_1) == 0)
   {
     cli1_ipaddr = *sender_addr;
@@ -87,55 +92,67 @@ udp_rx_callback(struct simple_udp_connection *c,
 
 #if WITH_SERVER_REPLY
 
-  char *datos_rx[2] = {NULL, NULL};
+  // Los datos siempre se reciben en formato: "etiqueta:valor".
+  // Se separa el mensaje recibido en dos partes: etiqueta y valor.
+  // Segun la etiqueta, se realiza una accion u otra.
 
-  // Llamar a la función para separar la cadena
+  char *datos_rx[2] = {NULL, NULL};
   char msg[32];
   snprintf(msg, sizeof(msg), "%s", (char *)data);
   separarCadena(msg, ":", datos_rx, 2);
 
+  // EMERGENCIA significa que el paciente ha pulsado el boton de emergencia.
+  // Se envia al cliente 2 (enfermero) la alerta de emergencia en cliente 1 (paciente). 
   if (strcmp(datos_rx[0], EMERGENCIA) == 0)
   {
-    LOG_INFO("RX: EMERGENCIA\n"); // debug
-    // Enviar al cliente 2 la alerta
+    LOG_INFO("RX: EMERGENCIA\n"); 
     alerta_emergencia = true;
-    // alerta = true;
-    simple_udp_sendto(&udp_conn[1], ALERTA_CLI_2, sizeof(ALERTA_CLI_2), &cli2_ipaddr); // 1: ALERTA
-    LOG_INFO("TX-CLI2: ALERTA\n");                                                     // debug
+    simple_udp_sendto(&udp_conn[1], ALERTA_CLI_2, sizeof(ALERTA_CLI_2), &cli2_ipaddr); 
+    LOG_INFO("TX-CLI2: ALERTA\n");                                                     
     LOG_INFO_6ADDR(&cli2_ipaddr);
     LOG_INFO_("\n");
   }
+
+  // TEMPERATURA significa que el cliente 1 (paciente) ha enviado su temperatura.
   else if (strcmp(datos_rx[0], TEMPERATURA) == 0)
   {
-    LOG_INFO("RX: TEMPERATURA\n"); // debug
+    LOG_INFO("RX: TEMPERATURA\n");
 
-    // Comprobar que no supere el umbral. Si lo supera, enviar alerta a los clientes
+    mqtt_temp_export(datos_rx[1]);
+
+    // Comprobar umbral de temperatura.
+    // Si supera el umbral, enviar alerta ambos clientes
     if (atof(datos_rx[1]) > UMBRAL_TEMPERATURA && alerta == false)
     {
-      // Enviar al cliente 1 la alerta para que este encienda led rojo
+      alerta = true;
+
+      // Enviar al cliente 1 la alerta 
       char *msg = ALERTA_TEMPERATURA_CLI_1;
       simple_udp_sendto(&udp_conn[0], msg, strlen(msg), &cli1_ipaddr);
       LOG_INFO("TX-CLI1: ALERTA_TEMPERATURA\n"); // debug
-      alerta = true;
-
+      
       // Enviar al cliente 2 la alerta
       simple_udp_sendto(&udp_conn[1], ALERTA_CLI_2, sizeof(ALERTA_CLI_2), &cli2_ipaddr);
-      LOG_INFO("TX-CLI2: ALERTA -- "); // debug
-      LOG_INFO_6ADDR(&cli2_ipaddr);
-      LOG_INFO_("\n");
+      LOG_INFO("TX-CLI2: ALERTA");
     }
-    // Si no supera el umbral y la alerta es true, se envia al cliente para avisar de que ya no hay alerta
+
+    // Si no supera el umbral, la alerta de temperatura estaba activa y la alerta de emergencia no esta activa,
+    // significa que la temperatura ha vuelto a la normalidad y se envia a los clientes fin de la alerta.
     else if (atof(datos_rx[1]) < UMBRAL_TEMPERATURA && alerta == true && alerta_emergencia == false)
     {
+      alerta = false;
+
       // Enviar al cliente 1 la alerta para que este encienda led verde
       char *msg = ALERTA_TEMPERATURA_FIN_CLI_1;
       simple_udp_sendto(&udp_conn[0], msg, strlen(msg), &cli1_ipaddr);
-      alerta = false;
 
-      // Enviar al cliente 2 fin alerta
+      // Enviar al cliente 2 fin alerta temperatura
       simple_udp_sendto(&udp_conn[1], ALERTA_FIN_CLI_2, sizeof(ALERTA_FIN_CLI_2), &cli2_ipaddr);
     }
   }
+
+  // ASISTENCIA significa que el enfermero ha pulsado el boton de asistencia en camino.
+  // Se desactivan alerta de emergencia y alerta de temperatura.
   else if (strcmp(datos_rx[0], ASISTENCIA) == 0)
   {
     LOG_INFO("RX: ASISTENCIA\n"); // debug
@@ -177,7 +194,7 @@ PROCESS_THREAD(alerta_proccess, ev, data)
 
   PROCESS_BEGIN();
 
-  // Timer para que el proceso se despierte cada 1 segundos
+  // Timer para que el proceso se despierte cada 2 segundos
   etimer_set(&periodic_timer, CLOCK_SECOND * 2);
 
   while (1)
@@ -187,8 +204,7 @@ PROCESS_THREAD(alerta_proccess, ev, data)
 
     if (alerta == true || alerta_emergencia == true)
     {
-      LOG_INFO("alerte %d - alerta_emergencia %d\n", alerta, alerta_emergencia);
-      LOG_INFO("Alerta true --> Temporizar\n");
+      LOG_INFO("Alerta activa --> Temporizar\n");
       process_poll(&periodic_process);
 
       // Esperamos hasta recibir evento de periodic_process (fin temporizacion 10s)
@@ -197,7 +213,7 @@ PROCESS_THREAD(alerta_proccess, ev, data)
       // Si la alerta sigue activa al finalizar la temporizacion, se envia la alerta urgente al enfermero
       if (alerta == true || alerta_emergencia == true)
       {
-        LOG_INFO("Alerta sigue true --> TX-CLI2-ALERTA_URGENTE\n");
+        LOG_INFO("Alerta sigue activa --> TX-CLI2-ALERTA_URGENTE\n");
         char *msg = ALERTA_URGENTE_CLI_2;
         simple_udp_sendto(&udp_conn[1], msg, strlen(msg), &cli2_ipaddr);
       }
@@ -226,12 +242,9 @@ PROCESS_THREAD(periodic_process, ev, data)
     // Esperamos hasta recibir evento de alerta_proccess (alerta activa) para comenzar la temporizacion
     PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_POLL);
     LOG_INFO("------> Temporizando 10s\n");
-    LOG_INFO("alerte %d - alerta_emergencia %d\n", alerta, alerta_emergencia);
-    // Configuramos el timer periodico para que expire en 1 segundos.
 
+    // Configuramos el timer para que expire en 10 segundos.
     etimer_set(&timer, CLOCK_SECOND * 10);
-    LOG_INFO("alerte %d - alerta_emergencia %d\n", alerta, alerta_emergencia);
-
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer));
     etimer_reset(&timer);
     LOG_INFO("Fin temporizacion 10s\n");
@@ -244,7 +257,6 @@ PROCESS_THREAD(periodic_process, ev, data)
  * Funcion que separa una cadena en partes, utilizando un delimitador; y guarda
  * cada parte en un array.
  * --------------------------------------------------------------------------*/
-
 void separarCadena(char *cadena, char *delimitador, char *partes[], int numPartes)
 {
   char *token = strtok(cadena, delimitador);
@@ -257,4 +269,29 @@ void separarCadena(char *cadena, char *delimitador, char *partes[], int numParte
     i++;
     token = strtok(NULL, delimitador);
   }
+}
+
+/*---------------------------------------------------------------------------
+ * Funcion que transforma la temperatura de grados Celsius a Fahrenheit para
+ * exportarla mediante MQTT.
+ * --------------------------------------------------------------------------*/
+void mqtt_temp_export(char *data_celsius_str)
+{
+  // Convertimos la cadena a int
+  float data_celsius = atof((char *)data_celsius_str);
+
+  // Convertimos grados Celsius a Fahrenheit
+  float data_fahrenheit = data_celsius * 2 + 32;
+
+  // Convertir el resultado a una cadena
+  char data_fahrenheit_str[32];
+  snprintf(data_fahrenheit_str, sizeof(data_fahrenheit_str), "%d.%02d",
+            (int) data_fahrenheit,
+             (int)((data_fahrenheit - (int)data_fahrenheit) * 100));
+
+  printf("mqtt-temp_c:%.*s;temp_f:%.*s;umbral:%d.%02d\n",
+         strlen(data_celsius_str), (char *)data_celsius_str, 
+         strlen(data_fahrenheit_str), (char *)data_fahrenheit_str,
+         (int)UMBRAL_TEMPERATURA, 
+         (int)((UMBRAL_TEMPERATURA - (int)UMBRAL_TEMPERATURA) * 100));
 }

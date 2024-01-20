@@ -24,6 +24,7 @@ LOG = logging.getLogger("[mqtt-exporter]")
 prom_msg_counter = None
 prom_temp_c_gauge = None
 prom_temp_f_gauge = None
+prom_umbral_gauge = None
 prom_switch_gauge = None
 
 
@@ -46,6 +47,12 @@ def create_temp_gauge_f_metrics():
 
     prom_temp_f_gauge = Gauge( 'temp_f',
         'Temperature [Fahrenheit Degrees]'
+    )
+def create_umbral_gauge_metrics():
+    global prom_umbral_gauge
+
+    prom_umbral_gauge = Gauge( 'umbral',
+        'Umbral de temperatura [Celsius Degrees]'
     )
 
 def create_switch_gauge_metrics():
@@ -107,6 +114,7 @@ def on_connect(client, _, __, rc):
     
     client.subscribe("temp_c")
     client.subscribe("temp_f")
+    client.subscribe("umbral")
     client.subscribe("switch")
     if rc != mqtt.CONNACK_ACCEPTED:
         LOG.error("[ERROR]: MQTT %s", rc)
@@ -134,6 +142,8 @@ def on_message(_, userdata, msg):
         prom_temp_c_gauge.set(payload)
     if(msg.topic == "temp_f"):
         prom_temp_f_gauge.set(payload)
+    if(msg.topic == "umbral"):
+        prom_umbral_gauge.set(payload)
     if(msg.topic == "switch"):
         prom_switch_gauge.set(payload)
 
@@ -174,6 +184,7 @@ def main():
     create_msg_counter_metrics()
     create_temp_gauge_c_metrics()
     create_temp_gauge_f_metrics()
+    create_umbral_gauge_metrics()
     create_switch_gauge_metrics()
 
     # Start prometheus server
@@ -197,6 +208,14 @@ def main():
         print("Serial Data: {0:s}".format(str(line, 'ascii').rstrip()))
         # Get data
         csv_fields=line.rstrip()
+
+        # Campos vienen precedidos por el prefijo "mqtt-"
+        # Si no viene el prefijo, se descarta el mensaje y se va a la siguiente iteración
+        if not csv_fields.startswith(b'mqtt-'):
+            continue
+
+        # Si viene el prefijo, se descarta el prefijo y se procesa el mensaje MQTT
+        csv_fields = csv_fields.replace(b'mqtt-', b'', 1)
 
         # Campos vienen separados por ;
         fields=csv_fields.split(b'\x3B') # ASCII del ;
@@ -222,6 +241,9 @@ def main():
                 elif value[1] == b"off":
                     value[1] = 0
                 client.publish(topic="switch", payload=value[1], qos=0, retain=False)
+
+            elif value[0] == b"umbral":
+                client.publish(topic="umbral", payload=value[1], qos=0, retain=False)
 
             # Print data received
             LOG.debug("Field[%s]: %f", value[0], float(value[1]))

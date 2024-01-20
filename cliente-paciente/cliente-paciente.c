@@ -160,6 +160,10 @@ PROCESS_THREAD(timer_process, ev, data)
 PROCESS_THREAD(temperature_sensor_process, ev, data)
 {
   static char str[32];
+  static int16_t temp = 0;
+  static int16_t int_tmp_F = 0;
+  static int16_t frac_tmp_F = 0;
+  static int16_t tmp_F = 0;
 
   PROCESS_BEGIN();
 
@@ -173,7 +177,15 @@ PROCESS_THREAD(temperature_sensor_process, ev, data)
     SENSORS_ACTIVATE(temperature_sensor);
 
     // Leemos la temperatura del sensor
-    int16_t temp = temperature_sensor.value(0);
+    temp = (int16_t) temperature_sensor.value(0);
+
+    // Conversion de grados Celcius a Fahrenheit  
+    tmp_F = temp * 2 + (32<<2);
+    int_tmp_F = tmp_F >> 2;
+    frac_tmp_F = (tmp_F & 0x3)*25;
+    
+    // MQTT
+    printf("mqtt-temp_c:%d.%d;temp_f:%d.%d\n", temp/4, temp%4*25, int_tmp_F, frac_tmp_F);
 
     // Desactivamos el sensor de temperatura
     SENSORS_DEACTIVATE(temperature_sensor);
