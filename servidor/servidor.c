@@ -257,6 +257,34 @@ PROCESS_THREAD(periodic_process, ev, data)
   }
   PROCESS_END();
 }
+
+/*---------------------------------------------------------------------------
+ * Proceso que hace parpadear los LEDS del servidor
+ * --------------------------------------------------------------------------*/
+
+PROCESS_THREAD(periodic_process, ev, data)
+{
+  static struct etimer timer_2;
+  
+  PROCESS_BEGIN();
+
+
+  etimer_set(&timer, CLOCK_SECOND * 2);
+
+
+  while(1) {
+
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer_2));
+    leds_single_on(LEDS_LED1); 
+    etimer_reset(&timer); 
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer_2)); 
+    leds_single_off(LEDS_LED1);
+    etimer_reset(&timer_2);
+   
+    }
+   
+
+}
 /*---------------------------------------------------------------------------
  * Funcion que separa una cadena en partes, utilizando un delimitador; y guarda
  * cada parte en un array.
