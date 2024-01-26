@@ -26,6 +26,8 @@ prom_temp_c_gauge = None
 prom_temp_f_gauge = None
 prom_umbral_gauge = None
 prom_switch_gauge = None
+prom_alerta_em_gauge = None
+prom_alerta_temp_gauge = None
 
 
 def create_msg_counter_metrics():
@@ -61,6 +63,21 @@ def create_switch_gauge_metrics():
     prom_switch_gauge = Gauge( 'switch',
         'Estado interruptor (on,off)'
     )
+
+def create_alerta_em_gauge_metrics():
+    global prom_alerta_em_gauge
+
+    prom_alerta_em_gauge = Gauge( 'alerta_em',
+        'Alerta Emergencia (1:on,2:off)'
+    )
+
+def create_alerta_temp_gauge_metrics():
+    global prom_alerta_temp_gauge
+
+    prom_alerta_temp_gauge = Gauge( 'alerta_temp',
+        'Alerta Temperatura (1:on,2:off)'
+    )
+
 
 def parse_message(raw_topic, raw_payload):
     try:
@@ -116,6 +133,9 @@ def on_connect(client, _, __, rc):
     client.subscribe("temp_f")
     client.subscribe("umbral")
     client.subscribe("switch")
+    client.subscribe("alerta_em")
+    client.subscribe("alerta_temp")
+
     if rc != mqtt.CONNACK_ACCEPTED:
         LOG.error("[ERROR]: MQTT %s", rc)
         print("[ERROR]: MQTT {0:d}".format(rc))
@@ -146,6 +166,10 @@ def on_message(_, userdata, msg):
         prom_umbral_gauge.set(payload)
     if(msg.topic == "switch"):
         prom_switch_gauge.set(payload)
+    if(msg.topic == "alerta_em"):
+        prom_alerta_em_gauge.set(payload)
+    if(msg.topic == "alerta_temp"):
+        prom_alerta_temp_gauge.set(payload)
 
 ########################################################################
 # Main
@@ -186,6 +210,8 @@ def main():
     create_temp_gauge_f_metrics()
     create_umbral_gauge_metrics()
     create_switch_gauge_metrics()
+    create_alerta_em_gauge_metrics()
+    create_alerta_temp_gauge_metrics()
 
     # Start prometheus server
     start_http_server(9000)
@@ -244,6 +270,12 @@ def main():
 
             elif value[0] == b"umbral":
                 client.publish(topic="umbral", payload=value[1], qos=0, retain=False)
+            
+            elif value[0] == b"alerta_em":
+                client.publish(topic="alerta_em", payload=value[1], qos=0, retain=False)
+
+            elif value[0] == b"alerta_temp":
+                client.publish(topic="alerta_temp", payload=value[1], qos=0, retain=False)
 
             # Print data received
             LOG.debug("Field[%s]: %f", value[0], float(value[1]))

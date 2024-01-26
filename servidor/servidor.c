@@ -102,15 +102,15 @@ udp_rx_callback(struct simple_udp_connection *c,
   separarCadena(msg, ":", datos_rx, 2);
 
   // EMERGENCIA significa que el paciente ha pulsado el boton de emergencia.
-  // Se envia al cliente 2 (enfermero) la alerta de emergencia en cliente 1 (paciente). 
+  // Se envia al cliente 2 (enfermero) la alerta de emergencia en cliente 1 (paciente).
   if (strcmp(datos_rx[0], EMERGENCIA) == 0)
   {
-    LOG_INFO("RX: EMERGENCIA\n"); 
+    LOG_INFO("RX: EMERGENCIA\n");
     alerta_emergencia = true;
-    simple_udp_sendto(&udp_conn[1], ALERTA_CLI_2, sizeof(ALERTA_CLI_2), &cli2_ipaddr); 
-    LOG_INFO("TX-CLI2: ALERTA\n");                                                     
-    LOG_INFO_6ADDR(&cli2_ipaddr);
-    LOG_INFO_("\n");
+    printf("mqtt-alerta_em:1\n");
+
+    simple_udp_sendto(&udp_conn[1], ALERTA_CLI_2, sizeof(ALERTA_CLI_2), &cli2_ipaddr);
+    LOG_INFO("TX-CLI2: ALERTA\n");
   }
 
   // TEMPERATURA significa que el cliente 1 (paciente) ha enviado su temperatura.
@@ -125,12 +125,13 @@ udp_rx_callback(struct simple_udp_connection *c,
     if (atof(datos_rx[1]) > UMBRAL_TEMPERATURA && alerta == false)
     {
       alerta = true;
+      printf("mqtt-alerta_temp:1\n");
 
-      // Enviar al cliente 1 la alerta 
+      // Enviar al cliente 1 la alerta
       char *msg = ALERTA_TEMPERATURA_CLI_1;
       simple_udp_sendto(&udp_conn[0], msg, strlen(msg), &cli1_ipaddr);
       LOG_INFO("TX-CLI1: ALERTA_TEMPERATURA\n"); // debug
-      
+
       // Enviar al cliente 2 la alerta
       simple_udp_sendto(&udp_conn[1], ALERTA_CLI_2, sizeof(ALERTA_CLI_2), &cli2_ipaddr);
       LOG_INFO("TX-CLI2: ALERTA");
@@ -141,6 +142,7 @@ udp_rx_callback(struct simple_udp_connection *c,
     else if (atof(datos_rx[1]) < UMBRAL_TEMPERATURA && alerta == true && alerta_emergencia == false)
     {
       alerta = false;
+      printf("mqtt-alerta_temp:2\n");
 
       // Enviar al cliente 1 la alerta para que este encienda led verde
       char *msg = ALERTA_TEMPERATURA_FIN_CLI_1;
@@ -158,6 +160,8 @@ udp_rx_callback(struct simple_udp_connection *c,
     LOG_INFO("RX: ASISTENCIA\n"); // debug
     alerta_emergencia = false;
     alerta = false;
+    printf("mqtt-alerta_em:2\n");
+    printf("mqtt-alerta_temp:2\n");
   }
 
 #endif /* WITH_SERVER_REPLY */
@@ -216,7 +220,7 @@ PROCESS_THREAD(alerta_proccess, ev, data)
         LOG_INFO("Alerta sigue activa --> TX-CLI2-ALERTA_URGENTE\n");
         char *msg = ALERTA_URGENTE_CLI_2;
         simple_udp_sendto(&udp_conn[1], msg, strlen(msg), &cli2_ipaddr);
-      }
+      } 
     }
 
     etimer_reset(&periodic_timer);
@@ -265,7 +269,7 @@ void separarCadena(char *cadena, char *delimitador, char *partes[], int numParte
   while (token != NULL && i < numPartes)
   {
     partes[i] = token;
-    LOG_INFO("Parte %d = %.*s \n", i, strlen(partes[i]), (char *)partes[i]);
+    // LOG_INFO("Parte %d = %.*s \n", i, strlen(partes[i]), (char *)partes[i]);
     i++;
     token = strtok(NULL, delimitador);
   }
@@ -286,12 +290,14 @@ void mqtt_temp_export(char *data_celsius_str)
   // Convertir el resultado a una cadena
   char data_fahrenheit_str[32];
   snprintf(data_fahrenheit_str, sizeof(data_fahrenheit_str), "%d.%02d",
-            (int) data_fahrenheit,
-             (int)((data_fahrenheit - (int)data_fahrenheit) * 100));
+           (int)data_fahrenheit,
+           (int)((data_fahrenheit - (int)data_fahrenheit) * 100));
 
   printf("mqtt-temp_c:%.*s;temp_f:%.*s;umbral:%d.%02d\n",
-         strlen(data_celsius_str), (char *)data_celsius_str, 
+         strlen(data_celsius_str), (char *)data_celsius_str,
          strlen(data_fahrenheit_str), (char *)data_fahrenheit_str,
-         (int)UMBRAL_TEMPERATURA, 
+         (int)UMBRAL_TEMPERATURA,
          (int)((UMBRAL_TEMPERATURA - (int)UMBRAL_TEMPERATURA) * 100));
 }
+
+/*---------------------------------------------------------------------------*/
