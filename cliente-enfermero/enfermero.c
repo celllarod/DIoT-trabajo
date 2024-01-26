@@ -62,7 +62,6 @@ udp_rx_callback(struct simple_udp_connection *c,
   }
   if (strcmp((char *)data, ALERTA_URGENTE) == 0)
   { // 2: ALERTA URGENTE (temperatura alta o solicitud asistencia)
-    LOG_INFO("rojo_parpadeo\n");
     parpadeo = true;
     leds_single_off(LEDS_LED1);
   }
@@ -105,7 +104,6 @@ PROCESS_THREAD(udp_client_process, ev, data)
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
     if (NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr))
     {
-      LOG_INFO("Conectado\n");
       if (primera_conexion == true)
       {
         // Enviar mensaje de que se ha conectado al servidor
@@ -202,21 +200,18 @@ PROCESS_THREAD(parpadeo_process, ev, data)
 
   while (1)
   {
-    LOG_INFO("esperando process poll\n");
     PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_POLL);
     parpadeando = true;
-    LOG_INFO("Comenzar parpadeo\n");
 
     while (parpadeo == true)
     {
       etimer_set(&pap_timer, CLOCK_SECOND * 0.5);
-      LOG_INFO("parapadeo off\n");
       PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&pap_timer));
       leds_single_on(LEDS_LED2);
       etimer_reset(&pap_timer);
+
       PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&pap_timer));
       leds_single_off(LEDS_LED2);
-      LOG_INFO("parpadeo on\n");
       etimer_reset(&pap_timer);
     }
   }

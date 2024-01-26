@@ -25,7 +25,6 @@ prom_msg_counter = None
 prom_temp_c_gauge = None
 prom_temp_f_gauge = None
 prom_umbral_gauge = None
-prom_switch_gauge = None
 prom_alerta_em_gauge = None
 prom_alerta_temp_gauge = None
 
@@ -55,13 +54,6 @@ def create_umbral_gauge_metrics():
 
     prom_umbral_gauge = Gauge( 'umbral',
         'Umbral de temperatura [Celsius Degrees]'
-    )
-
-def create_switch_gauge_metrics():
-    global prom_switch_gauge
-
-    prom_switch_gauge = Gauge( 'switch',
-        'Estado interruptor (on,off)'
     )
 
 def create_alerta_em_gauge_metrics():
@@ -132,7 +124,6 @@ def on_connect(client, _, __, rc):
     client.subscribe("temp_c")
     client.subscribe("temp_f")
     client.subscribe("umbral")
-    client.subscribe("switch")
     client.subscribe("alerta_em")
     client.subscribe("alerta_temp")
 
@@ -164,8 +155,6 @@ def on_message(_, userdata, msg):
         prom_temp_f_gauge.set(payload)
     if(msg.topic == "umbral"):
         prom_umbral_gauge.set(payload)
-    if(msg.topic == "switch"):
-        prom_switch_gauge.set(payload)
     if(msg.topic == "alerta_em"):
         prom_alerta_em_gauge.set(payload)
     if(msg.topic == "alerta_temp"):
@@ -209,7 +198,6 @@ def main():
     create_temp_gauge_c_metrics()
     create_temp_gauge_f_metrics()
     create_umbral_gauge_metrics()
-    create_switch_gauge_metrics()
     create_alerta_em_gauge_metrics()
     create_alerta_temp_gauge_metrics()
 
@@ -261,12 +249,6 @@ def main():
                 client.publish(topic="temp_c", payload=value[1], qos=0, retain=False)
             elif value[0] == b"temp_f":
                 client.publish(topic="temp_f", payload=value[1], qos=0, retain=False)
-            elif value[0] == b"switch":
-                if value[1] == b"on":
-                    value[1] = 1
-                elif value[1] == b"off":
-                    value[1] = 0
-                client.publish(topic="switch", payload=value[1], qos=0, retain=False)
 
             elif value[0] == b"umbral":
                 client.publish(topic="umbral", payload=value[1], qos=0, retain=False)

@@ -17,7 +17,7 @@
 #define UDP_CLIENT_2_PORT 8766
 #define UDP_SERVER_PORT 5678
 
-#define UMBRAL_TEMPERATURA 37.0
+#define UMBRAL_TEMPERATURA 31.0
 
 #define CLIENTE_1 "C1"
 #define CLIENTE_2 "C2"
@@ -223,7 +223,7 @@ PROCESS_THREAD(alerta_proccess, ev, data)
         LOG_INFO("Alerta sigue activa --> TX-CLI2-ALERTA_URGENTE\n");
         char *msg = ALERTA_URGENTE_CLI_2;
         simple_udp_sendto(&udp_conn[1], msg, strlen(msg), &cli2_ipaddr);
-      } 
+      }
     }
 
     etimer_reset(&periodic_timer);
@@ -248,13 +248,13 @@ PROCESS_THREAD(periodic_process, ev, data)
 
     // Esperamos hasta recibir evento de alerta_proccess (alerta activa) para comenzar la temporizacion
     PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_POLL);
-    LOG_INFO("------> Temporizando 10s\n");
+    LOG_INFO("------> Temporizando 20s\n");
 
-    // Configuramos el timer para que expire en 10 segundos.
-    etimer_set(&timer, CLOCK_SECOND * 10);
+    // Configuramos el timer para que expire en 20 segundos.
+    etimer_set(&timer, CLOCK_SECOND * 20);
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer));
     etimer_reset(&timer);
-    LOG_INFO("Fin temporizacion 10s\n");
+    LOG_INFO("Fin temporizacion 20s\n");
     // Se envia un evento al proceso alerta_proccess indicando que ha finalizado la temporizacion
     process_poll(&alerta_proccess);
   }
@@ -268,24 +268,22 @@ PROCESS_THREAD(periodic_process, ev, data)
 PROCESS_THREAD(parpadeo_process, ev, data)
 {
   static struct etimer timer_2;
-  
-  PROCESS_BEGIN();
 
+  PROCESS_BEGIN();
 
   etimer_set(&timer_2, CLOCK_SECOND * 2);
 
-
-  while(1) {
+  while (1)
+  {
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer_2));
-    leds_single_on(LEDS_LED1); 
-    etimer_reset(&timer_2); 
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer_2)); 
+    leds_single_on(LEDS_LED1);
+    etimer_reset(&timer_2);
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer_2));
     leds_single_off(LEDS_LED1);
     etimer_reset(&timer_2);
-   
-    }
-    PROCESS_END();
+  }
+  PROCESS_END();
 }
 /*---------------------------------------------------------------------------
  * Funcion que separa una cadena en partes, utilizando un delimitador; y guarda
