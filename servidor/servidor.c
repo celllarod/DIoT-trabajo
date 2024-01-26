@@ -5,6 +5,8 @@
 #include "net/netstack.h"
 #include "net/ipv6/simple-udp.h"
 #include <stdlib.h> // Para usar atoi
+#include "dev/leds.h"
+#include "lib/sensors.h"
 
 #include "sys/log.h"
 #define LOG_MODULE "App"
@@ -47,8 +49,9 @@ void mqtt_temp_export(char *data_celsius_str);
 PROCESS(udp_server_process, "UDP server");
 PROCESS(alerta_proccess, "Proceso que envia alerta al enfermero");
 PROCESS(periodic_process, "Evento periodico process");
+PROCESS(parpadeo_process, "Parpadeo LED process");
 // AUTOSTART_PROCESSES(&udp_server_process, &periodic_process);
-AUTOSTART_PROCESSES(&udp_server_process, &alerta_proccess, &periodic_process);
+AUTOSTART_PROCESSES(&udp_server_process, &alerta_proccess, &periodic_process, &parpadeo_process);
 
 /*---------------------------------------------------------------------------*/
 static void
@@ -262,28 +265,27 @@ PROCESS_THREAD(periodic_process, ev, data)
  * Proceso que hace parpadear los LEDS del servidor
  * --------------------------------------------------------------------------*/
 
-PROCESS_THREAD(periodic_process, ev, data)
+PROCESS_THREAD(parpadeo_process, ev, data)
 {
   static struct etimer timer_2;
   
   PROCESS_BEGIN();
 
 
-  etimer_set(&timer, CLOCK_SECOND * 2);
+  etimer_set(&timer_2, CLOCK_SECOND * 2);
 
 
   while(1) {
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer_2));
     leds_single_on(LEDS_LED1); 
-    etimer_reset(&timer); 
+    etimer_reset(&timer_2); 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&timer_2)); 
     leds_single_off(LEDS_LED1);
     etimer_reset(&timer_2);
    
     }
-   
-
+    PROCESS_END();
 }
 /*---------------------------------------------------------------------------
  * Funcion que separa una cadena en partes, utilizando un delimitador; y guarda
